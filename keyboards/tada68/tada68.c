@@ -29,3 +29,8 @@ void led_set_kb(uint8_t usb_led) {
     }
 	led_set_user(usb_led);
 }
+
+bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+	xprintf("KL: row: %u, column: %u, pressed: %u\n", record->event.key.col, record->event.key.row, record->event.pressed);
+	return true;
+}
