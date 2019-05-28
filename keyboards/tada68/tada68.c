@@ -26,7 +26,7 @@ void led_set_kb(uint8_t usb_led) {
     } else {
         // Turn capslock off
         PORTB |= (1<<2);
-    }
+    }32
 	led_set_user(usb_led);
 }
 
