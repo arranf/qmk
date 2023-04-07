@@ -15,6 +15,7 @@
  */
 
 #include "xtonhasvim.h"
+#include "fancylighting.h"
 
 /************************************
  * helper foo
@@ -35,15 +36,15 @@ static void CMD(uint16_t keycode) {
 }
 
 static void CTRL(uint16_t keycode) {
-  PRESS(KC_LCTRL);
+  PRESS(KC_LCTL);
     TAP(keycode);
-  RELEASE(KC_LCTRL);
+  RELEASE(KC_LCTL);
 }
 
 static void SHIFT(uint16_t keycode) {
-  PRESS(KC_LSHIFT);
+  PRESS(KC_LSFT);
     TAP(keycode);
-  RELEASE(KC_LSHIFT);
+  RELEASE(KC_LSFT);
 }
 
 static void ALT(uint16_t keycode) {
@@ -53,13 +54,13 @@ static void ALT(uint16_t keycode) {
 }
 
 
-static uint16_t vstate = VIM_START;
+uint16_t vstate = VIM_START;
 static bool yank_was_lines = false;
 static bool SHIFTED = false;
 static uint32_t mod_override_layer_state = 0;
 static uint16_t mod_override_triggering_key = 0;
 
-static void edit(void) { vstate = VIM_START; layer_on(_EDIT); layer_off(_CMD); }
+static void edit(void) { vstate = VIM_START; layer_clear(); }
 #define EDIT edit()
 
 
@@ -102,25 +103,54 @@ static void simple_movement(uint16_t keycode) {
   }
 }
 
+static void comma_period(uint16_t keycode) {
+  switch (keycode) {
+  case VIM_COMMA:
+    if (SHIFTED) {
+      // indent
+      CMD(KC_LEFT_BRACKET);
+    } else {
+      // toggle comment
+      CMD(KC_SLASH);
+    }
+    break;
+  case VIM_PERIOD:
+    if (SHIFTED) {
+      // outdent
+      CMD(KC_RIGHT_BRACKET);
+    }
+    break;
+  }
+}
+
 __attribute__ ((weak))
 bool process_record_keymap(uint16_t keycode, keyrecord_t *record) {
   return true;
 }
 
-#define PASS_THRU process_record_keymap(keycode, record)
-
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
-  if(record->event.pressed && layer_state_is(_CMD) && IS_MOD(keycode)) {
+  /* keymap gets first whack */
+  if(!process_record_keymap(keycode, record)) return false;
+
+  /****** FIREY_RETURN *****/
+  if(record->event.pressed && keycode == FIREY_RETURN) {
+    start_firey_return();
+    TAP(KC_ENT);
+  }
+
+  /****** mod passthru *****/
+  if(record->event.pressed && layer_state_is(vim_cmd_layer()) && (IS_MODIFIER_KEYCODE(keycode) || keycode == LSFT(KC_LALT))) {
     mod_override_layer_state = layer_state;
     mod_override_triggering_key = keycode;
+    // TODO: change this to track key location instead
     layer_clear();
-    return PASS_THRU; // let the event fall through...
+    return true; // let the event fall through...
   }
   if(mod_override_layer_state && !record->event.pressed && keycode == mod_override_triggering_key) {
     layer_state_set(mod_override_layer_state);
     mod_override_layer_state = 0;
     mod_override_triggering_key = 0;
-    return PASS_THRU;
+    return true;
   }
 
   if (VIM_START <= keycode && keycode <= VIM_ESC) {
@@ -132,7 +162,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     if (record->event.pressed) {
       if(keycode == VIM_START) {
         // entry from anywhere
-        layer_on(_CMD);
+        layer_on(vim_cmd_layer());
         vstate = VIM_START;
 
         // reset state
@@ -164,9 +194,9 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
               break;
             case VIM_C:
               if(SHIFTED) {
-                PRESS(KC_LSHIFT);
+                PRESS(KC_LSFT);
                   CMD(KC_RIGHT);
-                RELEASE(KC_LSHIFT);
+                RELEASE(KC_LSFT);
                 CMD(KC_X);
                 yank_was_lines = false;
                 EDIT;
@@ -176,7 +206,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
               break;
             case VIM_D:
               if(SHIFTED) {
-                TAP(KC_K);
+                CTRL(KC_K);
               } else {
                 vstate = VIM_D;
               }
@@ -245,9 +275,9 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
               // s for substitute?
               if(SHIFTED) {
                 CMD(KC_LEFT);
-                PRESS(KC_LSHIFT);
+                PRESS(KC_LSFT);
                   CMD(KC_RIGHT);
-                RELEASE(KC_LSHIFT);
+                RELEASE(KC_LSFT);
                 CMD(KC_X);
                 yank_was_lines = false;
                 EDIT;
@@ -262,7 +292,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
               if(SHIFTED) {
                 PRESS(KC_LSFT);
                   CMD(KC_Z);
-                RELEASE(KC_LSHIFT);
+                RELEASE(KC_LSFT);
               } else {
                 CMD(KC_Z);
               }
@@ -300,19 +330,8 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
               }
               break;
             case VIM_COMMA:
-              if(SHIFTED) {
-                // indent
-                CMD(KC_LBRACKET);
-              } else {
-                // toggle comment
-                CMD(KC_SLASH);
-              }
-              break;
             case VIM_PERIOD:
-              if(SHIFTED) {
-                // outdent
-                CMD(KC_RBRACKET);
-              }
+              comma_period(keycode);
               break;
           }
           break;
@@ -336,9 +355,9 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 
           case VIM_C:
             CMD(KC_LEFT);
-            PRESS(KC_LSHIFT);
+            PRESS(KC_LSFT);
               CMD(KC_RIGHT);
-            RELEASE(KC_LSHIFT);
+            RELEASE(KC_LSFT);
             CMD(KC_X);
             yank_was_lines = false;
             EDIT;
@@ -358,9 +377,9 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
           switch(keycode) {
             case VIM_W:
               ALT(KC_LEFT);
-              PRESS(KC_LSHIFT);
+              PRESS(KC_LSFT);
                 ALT(KC_RIGHT);
-              RELEASE(KC_LSHIFT);
+              RELEASE(KC_LSFT);
               CMD(KC_X);
               yank_was_lines = false;
               EDIT;
@@ -408,9 +427,9 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
           switch(keycode) {
             case VIM_W:
               ALT(KC_LEFT);
-              PRESS(KC_LSHIFT);
+              PRESS(KC_LSFT);
                 ALT(KC_RIGHT);
-              RELEASE(KC_LSHIFT);
+              RELEASE(KC_LSFT);
               CMD(KC_X);
               yank_was_lines = false;
               vstate = VIM_START;
@@ -432,33 +451,33 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
               break;
             case VIM_B:
               PRESS(KC_LALT);
-              PRESS(KC_LSHIFT);
+              PRESS(KC_LSFT);
               PRESS(KC_LEFT);
               // leave open for key repeat
               break;
             case VIM_E:
               PRESS(KC_LALT);
-              PRESS(KC_LSHIFT);
+              PRESS(KC_LSFT);
               PRESS(KC_RIGHT);
               // leave open for key repeat
               break;
             case VIM_H:
-              PRESS(KC_LSHIFT);
+              PRESS(KC_LSFT);
               PRESS(KC_LEFT);
               break;
             case VIM_I:
               vstate = VIM_VI;
               break;
             case VIM_J:
-              PRESS(KC_LSHIFT);
+              PRESS(KC_LSFT);
               PRESS(KC_DOWN);
               break;
             case VIM_K:
-              PRESS(KC_LSHIFT);
+              PRESS(KC_LSFT);
               PRESS(KC_UP);
               break;
             case VIM_L:
-              PRESS(KC_LSHIFT);
+              PRESS(KC_LSFT);
               PRESS(KC_RIGHT);
               break;
             case VIM_W:
@@ -483,6 +502,10 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
               TAP(KC_RIGHT);
               vstate = VIM_START;
               break;
+            case VIM_COMMA:
+            case VIM_PERIOD:
+              comma_period(keycode);
+              break;
             default:
               // do nothing
               break;
@@ -495,9 +518,9 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
           switch(keycode) {
             case VIM_W:
               ALT(KC_LEFT);
-              PRESS(KC_LSHIFT);
+              PRESS(KC_LSFT);
                 ALT(KC_RIGHT);
-              RELEASE(KC_LSHIFT);
+              RELEASE(KC_LSFT);
               vstate = VIM_V;
             default:
               // ignore
@@ -517,11 +540,11 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
               vstate = VIM_START;
               break;
             case VIM_J:
-              PRESS(KC_LSHIFT);
+              PRESS(KC_LSFT);
               PRESS(KC_DOWN);
               break;
             case VIM_K:
-              PRESS(KC_LSHIFT);
+              PRESS(KC_LSFT);
               PRESS(KC_UP);
               break;
             case VIM_Y:
@@ -538,6 +561,10 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             case VIM_ESC:
               TAP(KC_RIGHT);
               vstate = VIM_START;
+              break;
+            case VIM_COMMA:
+            case VIM_PERIOD:
+              comma_period(keycode);
               break;
             default:
               // do nothing
@@ -610,6 +637,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     }
     return false;
   } else {
-    return PASS_THRU;
+    return true;
   }
 }
+

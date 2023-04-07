@@ -1,339 +1,209 @@
-/*
-Copyright 2017 Christopher Courtney <drashna@live.com> @drashna
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 2 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Copyright 2020 Christopher Courtney, aka Drashna Jael're  (@drashna) <drashna@live.com>
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "drashna.h"
-#include "version.h"
-#include "eeprom.h"
-#include "tap_dances.h"
-#include "rgb_stuff.h"
 
-
-float tone_copy[][2]            = SONG(SCROLL_LOCK_ON_SOUND);
-float tone_paste[][2]           = SONG(SCROLL_LOCK_OFF_SOUND);
-
-static uint16_t copy_paste_timer;
 userspace_config_t userspace_config;
 
-//  Helper Functions
-
-
-// This block is for all of the gaming macros, as they were all doing
-// the same thing, but with differring text sent.
-bool send_game_macro(const char *str, keyrecord_t *record, bool override) {
-  if (!record->event.pressed || override) {
-    clear_keyboard();
-    tap(userspace_config.is_overwatch ? KC_BSPC : KC_ENTER);
-    wait_ms(50);
-    send_string(str);
-    wait_ms(50);
-    tap(KC_ENTER);
-  }
-  if (override) wait_ms(3000);
-  return false;
+/**
+ * @brief Handle registering a keycode, with optional modifer based on timed event
+ *
+ * @param code keycode to send to host
+ * @param mod_code modifier to send with code, if held for tapping term or longer
+ * @param pressed the press/release event (can use "record->event.pressed" for this)
+ * @return true exits function
+ * @return false exits function
+ */
+bool mod_key_press_timer(uint16_t code, uint16_t mod_code, bool pressed) {
+    static uint16_t this_timer;
+    mod_key_press(code, mod_code, pressed, this_timer);
+    return false;
 }
 
-void tap(uint16_t keycode){ register_code(keycode); unregister_code(keycode); };
-
-
-// Add reconfigurable functions here, for keymap customization
-// This allows for a global, userspace functions, and continued
-// customization of the keymap.  Use _keymap instead of _user
-// functions in the keymaps
-__attribute__ ((weak))
-void matrix_init_keymap(void) {}
-
-__attribute__ ((weak))
-void matrix_scan_keymap(void) {}
-
-__attribute__ ((weak))
-bool process_record_keymap(uint16_t keycode, keyrecord_t *record) {
-  return true;
-}
-
-__attribute__ ((weak))
-bool process_record_secrets(uint16_t keycode, keyrecord_t *record) {
-  return true;
-}
-
-__attribute__ ((weak))
-uint32_t layer_state_set_keymap (uint32_t state) {
-  return state;
-}
-
-__attribute__ ((weak))
-void led_set_keymap(uint8_t usb_led) {}
-
-
-// Call user matrix init, set default RGB colors and then
-// call the keymap's init function
-void matrix_init_user(void) {
-  userspace_config.raw = eeprom_read_byte(EECONFIG_USERSPACE);
-
-#ifdef AUDIO_CLICKY
-  clicky_enable = userspace_config.clicky_enable;
-#endif
-
-#ifdef BOOTLOADER_CATERINA
-  DDRD &= ~(1<<5);
-  PORTD &= ~(1<<5);
-
-  DDRB &= ~(1<<0);
-  PORTB &= ~(1<<0);
-#endif
-
-
-#if (defined(UNICODE_ENABLE) || defined(UNICODEMAP_ENABLE) || defined(UCIS_ENABLE))
-	set_unicode_input_mode(UC_WINC);
-#endif //UNICODE_ENABLE
-  matrix_init_rgb();
-  matrix_init_keymap();
-}
-
-
-// No global matrix scan code, so just run keymap's matrix
-// scan function
-void matrix_scan_user(void) {
-
-#ifdef TAP_DANCE_ENABLE  // Run Diablo 3 macro checking code.
-  run_diablo_macro_check();
-#endif // TAP_DANCE_ENABLE
-
-#ifdef RGBLIGHT_ENABLE
-  matrix_scan_rgb();
-#endif // RGBLIGHT_ENABLE
-
-  matrix_scan_keymap();
-}
-
-
-
-
-// Defines actions tor my global custom keycodes. Defined in drashna.h file
-// Then runs the _keymap's record handier if not processed here
-bool process_record_user(uint16_t keycode, keyrecord_t *record) {
-
-  // If console is enabled, it will print the matrix position and status of each key pressed
-#ifdef KEYLOGGER_ENABLE
-  xprintf("KL: row: %u, column: %u, pressed: %u\n", record->event.key.col, record->event.key.row, record->event.pressed);
-#endif //KEYLOGGER_ENABLE
-
-  switch (keycode) {
-  case KC_QWERTY:
-    if (record->event.pressed) {
-      set_single_persistent_default_layer(_QWERTY);
-    }
-    return false;
-    break;
-  case KC_COLEMAK:
-    if (record->event.pressed) {
-      set_single_persistent_default_layer(_COLEMAK);
-    }
-    return false;
-    break;
-  case KC_DVORAK:
-    if (record->event.pressed) {
-      set_single_persistent_default_layer(_DVORAK);
-    }
-    return false;
-    break;
-  case KC_WORKMAN:
-    if (record->event.pressed) {
-      set_single_persistent_default_layer(_WORKMAN);
-    }
-    return false;
-    break;
-
-
-  case KC_MAKE:  // Compiles the firmware, and adds the flash command based on keyboard bootloader
-    if (!record->event.pressed) {
-      SEND_STRING("make " QMK_KEYBOARD ":" QMK_KEYMAP
-#if  (defined(BOOTLOADER_DFU) || defined(BOOTLOADER_LUFA_DFU) || defined(BOOTLOADER_QMK_DFU))
-                   ":dfu"
-#elif defined(BOOTLOADER_HALFKAY)
-                   ":teensy"
-#elif defined(BOOTLOADER_CATERINA)
-                   ":avrdude"
-#endif // bootloader options
-                   SS_TAP(X_ENTER));
-    }
-    return false;
-    break;
-
-
-  case KC_RESET: // Custom RESET code that sets RGBLights to RED
-    if (!record->event.pressed) {
-#ifdef RGBLIGHT_ENABLE
-      rgblight_enable_noeeprom();
-      rgblight_mode_noeeprom(1);
-      rgblight_setrgb_red();
-#endif // RGBLIGHT_ENABLE
-      reset_keyboard();
-    }
-    return false;
-    break;
-
-
-  case EPRM: // Resets EEPROM
-    if (record->event.pressed) {
-      eeconfig_init();
-      default_layer_set(1UL<<eeconfig_read_default_layer());
-      layer_state_set(layer_state);
-    }
-    return false;
-    break;
-  case VRSN: // Prints firmware version
-    if (record->event.pressed) {
-      SEND_STRING(QMK_KEYBOARD "/" QMK_KEYMAP " @ " QMK_VERSION ", Built on: " QMK_BUILDDATE);
-    }
-    return false;
-    break;
-
-/*  Code has been depreciated
-    case KC_SECRET_1 ... KC_SECRET_5: // Secrets!  Externally defined strings, not stored in repo
-      if (!record->event.pressed) {
-        clear_oneshot_layer_state(ONESHOT_OTHER_KEY_PRESSED);
-        send_string(decoy_secret[keycode - KC_SECRET_1]);
-      }
-      return false;
-      break;
-*/
-
-// These are a serious of gaming macros.
-// Only enables for the viterbi, basically,
-// to save on firmware space, since it's limited.
-#ifdef MACROS_ENABLED
-  case KC_OVERWATCH: // Toggle's if we hit "ENTER" or "BACKSPACE" to input macros
-    if (record->event.pressed) { userspace_config.is_overwatch ^= 1; eeprom_update_byte(EECONFIG_USERSPACE, userspace_config.raw); }
-#ifdef RGBLIGHT_ENABLE
-    userspace_config.is_overwatch ? rgblight_mode_noeeprom(17) : rgblight_mode_noeeprom(18);
-#endif //RGBLIGHT_ENABLE
-    return false; break;
-  case KC_SALT:
-    return send_game_macro("Salt, salt, salt...", record, false);
-  case KC_MORESALT:
-    return  send_game_macro("Please sir, can I have some more salt?!", record, false);
-  case KC_SALTHARD:
-    return send_game_macro("Your salt only makes me harder, and even more aggressive!", record, false);
-  case KC_GOODGAME:
-    return send_game_macro("Good game, everyone!", record, false);
-  case KC_GLHF:
-    return send_game_macro("Good luck, have fun!!!", record, false);
-  case KC_SYMM:
-    return send_game_macro("Left click to win!", record, false);
-  case KC_JUSTGAME:
-    return send_game_macro("It may be a game, but if you don't want to actually try, please go play AI, so that people that actually want to take the game seriously and \"get good\" have a place to do so without trolls like you throwing games.", record, false);
-  case KC_TORB:
-    return send_game_macro("That was positively riveting!", record, false);
-  case KC_AIM:
-    send_game_macro("That aim is absolutely amazing. It's almost like you're a machine!", record, true);
-    return send_game_macro("Wait! That aim is TOO good!  You're clearly using an aim hack! CHEATER!", record, false);
-  case KC_C9:
-    return send_game_macro("OMG!!!  C9!!!", record, false);
-  case KC_GGEZ:
-    return send_game_macro("That was a fantastic game, though it was a bit easy. Try harder next time!", record, false);
-#endif // MACROS_ENABLED
-
-
-  case KC_DIABLO_CLEAR:  // reset all Diablo timers, disabling them
-#ifdef TAP_DANCE_ENABLE
-    if (record->event.pressed) {
-      uint8_t dtime;
-      for (dtime = 0; dtime < 4; dtime++) {
-        diablo_key_time[dtime] = diablo_times[0];
-      }
-    }
-#endif // TAP_DANCE_ENABLE#endif
-    return false; break;
-
-
-  case KC_CCCV:                                    // One key copy/paste
-    if(record->event.pressed){
-      copy_paste_timer = timer_read();
+/**
+ * @brief Handle registation of keycode, with optional modifier based on custom timer
+ *
+ * @param code keycode to send to host
+ * @param mod_code modifier keycode to send with code, if held for tapping term or longer
+ * @param pressed the press/release event
+ * @param this_timer custom timer to use
+ * @return true
+ * @return false
+ */
+bool mod_key_press(uint16_t code, uint16_t mod_code, bool pressed, uint16_t this_timer) {
+    if (pressed) {
+        this_timer = timer_read();
     } else {
-      if (timer_elapsed(copy_paste_timer) > TAPPING_TERM) {   // Hold, copy
-        register_code(KC_LCTL);
-        tap(KC_C);
-        unregister_code(KC_LCTL);
-#ifdef AUDIO_ENABLE
-        PLAY_SONG(tone_copy);
-#endif
-      } else {                                // Tap, paste
-        register_code(KC_LCTL);
-        tap(KC_V);
-        unregister_code(KC_LCTL);
-#ifdef AUDIO_ENABLE
-        PLAY_SONG(tone_paste);
-#endif
-      }
+        if (timer_elapsed(this_timer) < TAPPING_TERM) {
+            tap_code(code);
+        } else {
+            register_code(mod_code);
+            tap_code(code);
+            unregister_code(mod_code);
+        }
     }
     return false;
-    break;
-  case CLICKY_TOGGLE:
-#ifdef AUDIO_CLICKY
-    userspace_config.clicky_enable = clicky_enable;
-    eeprom_update_byte(EECONFIG_USERSPACE, userspace_config.raw);
-#endif
-    break;
-#ifdef UNICODE_ENABLE
-  case UC_FLIP: // (╯°□°)╯ ︵ ┻━┻
-    if (record->event.pressed) {
-      register_code(KC_RSFT);
-      tap(KC_9);
-      unregister_code(KC_RSFT);
-      process_unicode((0x256F | QK_UNICODE), record); // Arm
-      process_unicode((0x00B0 | QK_UNICODE), record); // Eye
-      process_unicode((0x25A1 | QK_UNICODE), record); // Mouth
-      process_unicode((0x00B0 | QK_UNICODE), record); // Eye
-      register_code(KC_RSFT);
-      tap(KC_0);
-      unregister_code(KC_RSFT);
-      process_unicode((0x256F | QK_UNICODE), record); // Arm
-      tap(KC_SPC);
-      process_unicode((0x0361 | QK_UNICODE), record); // Flippy
-      tap(KC_SPC);
-      process_unicode((0x253B | QK_UNICODE), record); // Table
-      process_unicode((0x2501 | QK_UNICODE), record); // Table
-      process_unicode((0x253B | QK_UNICODE), record); // Table
+}
+
+/**
+ * @brief Performs exact match for modifier values
+ *
+ * @param value the modifer varible (get_mods/get_oneshot_mods/get_weak_mods)
+ * @param mask the modifier mask to check for
+ * @return true Has the exact modifiers specifed
+ * @return false Does not have the exact modifiers specified
+ */
+bool hasAllBitsInMask(uint8_t value, uint8_t mask) {
+    value &= 0xF;
+    mask &= 0xF;
+
+    return (value & mask) == mask;
+}
+
+/**
+ * @brief Tap keycode, with no mods
+ *
+ * @param kc keycode to use
+ */
+void tap_code16_nomods(uint16_t kc) {
+    uint8_t temp_mod = get_mods();
+    clear_mods();
+    clear_oneshot_mods();
+    tap_code16(kc);
+    set_mods(temp_mod);
+}
+
+#ifdef I2C_SCANNER_ENABLE
+#    include "i2c_master.h"
+#    include "debug.h"
+
+#    ifndef I2C_SCANNER_TIMEOUT
+#        define I2C_SCANNER_TIMEOUT 50
+#    endif
+
+i2c_status_t i2c_start_bodge(uint8_t address, uint16_t timeout) {
+    i2c_start(address);
+
+    // except on ChibiOS where the only way is do do "something"
+    uint8_t data = 0;
+    return i2c_readReg(address, 0, &data, sizeof(data), I2C_SCANNER_TIMEOUT);
+}
+
+#    define i2c_start i2c_start_bodge
+
+void do_scan(void) {
+    uint8_t nDevices = 0;
+
+    dprintf("Scanning...\n");
+
+    for (uint8_t address = 1; address < 127; address++) {
+        // The i2c_scanner uses the return value of
+        // i2c_start to see if a device did acknowledge to the address.
+        i2c_status_t error = i2c_start(address << 1, I2C_SCANNER_TIMEOUT);
+        if (error == I2C_STATUS_SUCCESS) {
+            i2c_stop();
+            xprintf("  I2C device found at address 0x%02X\n", I2C_SCANNER_TIMEOUT);
+            nDevices++;
+        } else {
+            // dprintf("  Unknown error (%u) at address 0x%02X\n", error, address);
+        }
     }
-    return false;
-    break;
-#endif // UNICODE_ENABLE
 
-  }
-  return process_record_keymap(keycode, record) && process_record_secrets(keycode, record) && process_record_user_rgb(keycode, record);
+    if (nDevices == 0)
+        xprintf("No I2C devices found\n");
+    else
+        xprintf("done\n");
 }
 
+uint16_t scan_timer = 0;
 
-
-// Runs state check and changes underglow color and animation
-// on layer change, no matter where the change was initiated
-// Then runs keymap's layer change check
-uint32_t layer_state_set_user(uint32_t state) {
-  state = update_tri_layer_state(state, _RAISE, _LOWER, _ADJUST);
-#ifdef RGBLIGHT_ENABLE
-  state = layer_state_set_rgb(state);
-#endif // RGBLIGHT_ENABLE
-  return layer_state_set_keymap (state);
+void housekeeping_task_i2c_scanner(void) {
+    if (timer_elapsed(scan_timer) > 5000) {
+        do_scan();
+        scan_timer = timer_read();
+    }
 }
 
+void keyboard_post_init_i2c(void) {
+    i2c_init();
+    scan_timer = timer_read();
+}
+#endif
 
-// Any custom LED code goes here.
-// So far, I only have keyboard specific code,
-// So nothing goes here.
-void led_set_user(uint8_t usb_led) {
-  led_set_keymap(usb_led);
+#if defined(AUTOCORRECT_ENABLE)
+#    if defined(AUDIO_ENABLE)
+#        ifdef USER_SONG_LIST
+float autocorrect_song[][2] = SONG(MARIO_GAMEOVER);
+#        else
+float autocorrect_song[][2] = SONG(PLOVER_GOODBYE_SOUND);
+#        endif
+#    endif
+
+bool apply_autocorrect(uint8_t backspaces, const char* str) {
+    if (layer_state_is(_GAMEPAD)) {
+        return false;
+    }
+    // TO-DO use unicode stuff for this.  Will probably have to reverse engineer
+    // send string to get working properly, to send char string.
+
+#    if defined(AUDIO_ENABLE)
+    PLAY_SONG(autocorrect_song);
+#    endif
+    return true;
+}
+#endif
+
+#if defined(CAPS_WORD_ENABLE)
+bool caps_word_press_user(uint16_t keycode) {
+    switch (keycode) {
+        // Keycodes that continue Caps Word, with shift applied.
+        case KC_MINS:
+            if (!keymap_config.swap_lctl_lgui) {
+                return true;
+            }
+        case KC_A ... KC_Z:
+            add_weak_mods(MOD_BIT(KC_LSFT)); // Apply shift to next key.
+            return true;
+
+        // Keycodes that continue Caps Word, without shifting.
+        case KC_1 ... KC_0:
+        case KC_BSPC:
+        case KC_DEL:
+        case KC_UNDS:
+            return true;
+
+        default:
+            return false; // Deactivate Caps Word.
+    }
+}
+
+#    if !defined(NO_ACTION_ONESHOT)
+void oneshot_locked_mods_changed_user(uint8_t mods) {
+    if (mods & MOD_MASK_SHIFT) {
+        del_mods(MOD_MASK_SHIFT);
+        set_oneshot_locked_mods(~MOD_MASK_SHIFT & get_oneshot_locked_mods());
+        caps_word_on();
+    }
+}
+#    endif
+#endif
+
+void format_layer_bitmap_string(char* buffer, layer_state_t state, layer_state_t default_state) {
+    for (int i = 0; i < 16; i++) {
+        if (i == 0 || i == 4 || i == 8 || i == 12) {
+            *buffer = ' ';
+            ++buffer;
+        }
+
+        uint8_t layer = i;
+        if ((default_state & ((layer_state_t)1 << layer)) != 0) {
+            *buffer = 'D';
+        } else if ((state & ((layer_state_t)1 << layer)) != 0) {
+            *buffer = '1';
+        } else {
+            *buffer = '_';
+        }
+        ++buffer;
+    }
+    *buffer = 0;
 }

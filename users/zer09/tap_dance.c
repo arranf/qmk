@@ -1,7 +1,7 @@
 #include "tap_dance.h"
 #include "lights.h"
 
-qk_tap_dance_action_t tap_dance_actions[] = {
+tap_dance_action_t tap_dance_actions[] = {
     [DA_LCTL] = ACTION_TAP_DANCE_FN_ADVANCED(NULL, dance_lctl_finished,
                                              dance_lctl_reset),
     [DA_LSPR] = ACTION_TAP_DANCE_FN_ADVANCED(NULL, dance_lspr_finished,
@@ -17,18 +17,30 @@ qk_tap_dance_action_t tap_dance_actions[] = {
 };
 
 volatile uint8_t active_layer = _BL;
+volatile uint8_t gm_layer_act = false;
 static tap upltap_state = {.state = 0};
 static tap dwltap_state = {.state = 0};
 static tap lsprtap_state = {.state = 0};
 static tap ralttap_state = {.state = 0};
 
 void layer_switcher_tap(uint8_t new_layer) {
-  layer_off(active_layer);
-  layer_on(new_layer);
-  active_layer = new_layer;
+  if (gm_layer_act == true) {
+    layer_off(active_layer);
+    if (new_layer == _BL) {
+      layer_on(_GM);
+      active_layer = _GM;
+    } else {
+      layer_on(new_layer);
+      active_layer = new_layer;
+    }
+  } else {
+    layer_off(active_layer);
+    layer_on(new_layer);
+    active_layer = new_layer;
+  }
 }
 
-int cur_dance(qk_tap_dance_state_t *state) {
+int cur_dance(tap_dance_state_t *state) {
   switch (state->count) {
   case 1:
     return state->pressed == 0 ? SINGLE_TAP : SINGLE_HOLD;
@@ -41,17 +53,17 @@ int cur_dance(qk_tap_dance_state_t *state) {
   }
 }
 
-void dance_lctl_finished(qk_tap_dance_state_t *state, void *user_data) {
+void dance_lctl_finished(tap_dance_state_t *state, void *user_data) {
   rbw_led_keys[RBW_LCTL].status = ENABLED;
-  register_code(KC_LCTRL);
+  register_code(KC_LCTL);
 };
 
-void dance_lctl_reset(qk_tap_dance_state_t *state, void *user_data) {
-  unregister_code(KC_LCTRL);
+void dance_lctl_reset(tap_dance_state_t *state, void *user_data) {
+  unregister_code(KC_LCTL);
   rbw_led_keys[RBW_LCTL].status = DISABLED;
 };
 
-void dance_lspr_finished(qk_tap_dance_state_t *state, void *user_data) {
+void dance_lspr_finished(tap_dance_state_t *state, void *user_data) {
   lsprtap_state.state = cur_dance(state);
 
   switch (lsprtap_state.state) {
@@ -65,7 +77,7 @@ void dance_lspr_finished(qk_tap_dance_state_t *state, void *user_data) {
   }
 };
 
-void dance_lspr_reset(qk_tap_dance_state_t *state, void *user_data) {
+void dance_lspr_reset(tap_dance_state_t *state, void *user_data) {
   switch (lsprtap_state.state) {
   case DOUBLE_HOLD:
     unregister_code(KC_LALT);
@@ -77,17 +89,17 @@ void dance_lspr_reset(qk_tap_dance_state_t *state, void *user_data) {
   }
 };
 
-void dance_rctl_finished(qk_tap_dance_state_t *state, void *user_data) {
+void dance_rctl_finished(tap_dance_state_t *state, void *user_data) {
   rbw_led_keys[RBW_RCTL].status = ENABLED;
-  register_code(KC_RCTRL);
+  register_code(KC_RCTL);
 };
 
-void dance_rctl_reset(qk_tap_dance_state_t *state, void *user_data) {
-  unregister_code(KC_RCTRL);
+void dance_rctl_reset(tap_dance_state_t *state, void *user_data) {
+  unregister_code(KC_RCTL);
   rbw_led_keys[RBW_RCTL].status = DISABLED;
 };
 
-void dance_ralt_finished(qk_tap_dance_state_t *state, void *user_data) {
+void dance_ralt_finished(tap_dance_state_t *state, void *user_data) {
   ralttap_state.state = cur_dance(state);
 
   switch (ralttap_state.state) {
@@ -101,7 +113,7 @@ void dance_ralt_finished(qk_tap_dance_state_t *state, void *user_data) {
   }
 };
 
-void dance_ralt_reset(qk_tap_dance_state_t *state, void *user_data) {
+void dance_ralt_reset(tap_dance_state_t *state, void *user_data) {
   switch (ralttap_state.state) {
   case DOUBLE_HOLD:
     unregister_code(KC_RGUI);
@@ -113,7 +125,7 @@ void dance_ralt_reset(qk_tap_dance_state_t *state, void *user_data) {
   }
 };
 
-void dance_uply_finished(qk_tap_dance_state_t *state, void *user_data) {
+void dance_uply_finished(tap_dance_state_t *state, void *user_data) {
   upltap_state.state = cur_dance(state);
 
   switch (upltap_state.state) {
@@ -133,7 +145,7 @@ void dance_uply_finished(qk_tap_dance_state_t *state, void *user_data) {
   }
 }
 
-void dance_uply_reset(qk_tap_dance_state_t *state, void *user_data) {
+void dance_uply_reset(tap_dance_state_t *state, void *user_data) {
   switch (upltap_state.state) {
   case SINGLE_TAP:
     break;
@@ -145,7 +157,7 @@ void dance_uply_reset(qk_tap_dance_state_t *state, void *user_data) {
   upltap_state.state = 0;
 }
 
-void dance_dwly_finished(qk_tap_dance_state_t *state, void *user_data) {
+void dance_dwly_finished(tap_dance_state_t *state, void *user_data) {
   dwltap_state.state = cur_dance(state);
 
   switch (dwltap_state.state) {
@@ -162,18 +174,27 @@ void dance_dwly_finished(qk_tap_dance_state_t *state, void *user_data) {
   case DOUBLE_HOLD:
     layer_switcher_tap(_AL);
     break;
+  case TRIPLE_TAP:
+    if (gm_layer_act == true) {
+      gm_layer_act = false;
+      layer_switcher_tap(_BL);
+    } else {
+      gm_layer_act = true;
+      layer_switcher_tap(_GM);
+    }
   default:
     layer_switcher_tap(_BL);
     break;
   }
 }
 
-void dance_dwly_reset(qk_tap_dance_state_t *state, void *user_data) {
+void dance_dwly_reset(tap_dance_state_t *state, void *user_data) {
   switch (dwltap_state.state) {
   case SINGLE_TAP:
     break;
   case SINGLE_HOLD:
   case DOUBLE_HOLD:
+  case TRIPLE_TAP:
   default:
     layer_switcher_tap(_BL);
     break;

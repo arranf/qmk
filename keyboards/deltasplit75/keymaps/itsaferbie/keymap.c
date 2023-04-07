@@ -7,11 +7,6 @@ extern keymap_config_t keymap_config;
 // Layer names don't all need to be of the same length, obviously, and you can also skip them
 // entirely and just use numbers.
 
-// Fillers to make layering more clear
-
-#define _______ KC_TRNS
-
-
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   /* Layer 0: Default Layer
    *,-----------------------------------------------------------------------.
@@ -38,7 +33,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   ),
 
   LAYOUT_v2(
-    RGB_TOG, RGB_HUI, RGB_SAI, RGB_VAI, _______, _______, _______,      _______, _______, _______, _______, _______, _______, _______, _______, RESET,
+    RGB_TOG, RGB_HUI, RGB_SAI, RGB_VAI, _______, _______, _______,      _______, _______, _______, _______, _______, _______, _______, _______, QK_BOOT,
     RGB_MOD, RGB_HUD, RGB_SAD, RGB_VAD, _______, _______, _______,      _______, _______, _______, _______, _______, _______, _______, _______, _______,
     _______, _______, _______, _______, _______, _______,               _______, _______, _______, _______, _______, _______, _______, _______, _______,
     _______, _______, _______, _______, _______, _______,               _______, _______, _______, _______, _______, _______, _______, _______, KC_VOLU,
